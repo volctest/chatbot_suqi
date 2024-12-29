@@ -19,6 +19,17 @@ function App() {
   const [isSilent, setIsSilent] = useState(false)
   const [currentSpeech, setCurrentSpeech] = useState('')
   const [isOffline, setIsOffline] = useState(!navigator.onLine)
+  const [latestVideoContext, setLatestVideoContext] = useState<string | null>(null)
+  const [networkStatus, setNetworkStatus] = useState<{
+    isRetrying: boolean;
+    retryCount: number;
+    lastError?: string;
+    isReconnecting: boolean;
+  }>({
+    isRetrying: false,
+    retryCount: 0,
+    isReconnecting: false
+  })
   const { addMessage, clearMessages } = useConversation()
   const videoRef = useRef<HTMLVideoElement>(null)
   const frameInterval = useRef<number>()
@@ -41,11 +52,20 @@ function App() {
       onNetworkStatusChange: (isOnline: boolean) => {
         setIsOffline(!isOnline);
         if (!isOnline) {
-          setError('Network connection lost. Waiting for connection to resume...');
+          setNetworkStatus(prev => ({
+            ...prev,
+            isReconnecting: true,
+            lastError: 'Waiting for network connection to resume...'
+          }));
           if (speechRecognizer.current) {
             speechRecognizer.current.stop();
           }
         } else {
+          setNetworkStatus({
+            isRetrying: false,
+            retryCount: 0,
+            isReconnecting: false
+          });
           setError('');
           if (isVideoOn && speechRecognizer.current) {
             speechRecognizer.current.start(
@@ -112,10 +132,17 @@ function App() {
               console.log('Speech recognized:', result.text);
             },
             (error) => {
-              setError(error);
               console.log('Speech recognition error:', error);
               if (error.includes('network')) {
                 console.log('Network issue detected in speech recognition');
+                setNetworkStatus(prev => ({
+                  ...prev,
+                  isRetrying: true,
+                  retryCount: prev.retryCount + 1,
+                  lastError: error
+                }));
+              } else {
+                setError(error);
               }
             }
           );
@@ -137,13 +164,11 @@ function App() {
                   sender: 'user'
                 });
 
-                // Get the latest video frame for context
-                const videoContext = await processVideoFrame(videoRef.current!);
-                
+                // Use the latest stored video context
                 // Process conversation with Gemini
                 const response = await processConversation(
                   speechToProcess,
-                  videoContext || undefined
+                  latestVideoContext || undefined
                 );
                 
                 if (response.error) {
@@ -157,10 +182,11 @@ function App() {
                 } else {
                   const responseText = response.text;
                   // Add AI response to conversation
+                  // Add AI response to conversation with video context if available
                   addMessage({
                     text: responseText,
                     sender: 'ai',
-                    videoContext: videoContext
+                    ...(latestVideoContext ? { videoContext: latestVideoContext } : {})
                   });
                   // Speak the response if not muted
                   if (!isMuted) {
@@ -181,27 +207,24 @@ function App() {
           setError('Failed to initialize speech recognition: ' + error);
         }
         
-        // Start processing frames every 2 seconds
+        // Start processing frames every 5 seconds (reduced frequency to avoid overwhelming)
         frameInterval.current = window.setInterval(async () => {
           try {
-            if (videoRef.current) {
-              const response = await processVideoFrame(videoRef.current);
-              addMessage({
-                text: response,
-                sender: 'ai',
-                videoContext: response
-              });
+            if (videoRef.current && !isSilent) {  // Only process frames when not processing speech
+              const videoContext = await processVideoFrame(videoRef.current);
+              console.log('Video context processed successfully');
+              // Don't add message for every frame, just store context
+              if (videoContext) {
+                // Store latest video context for next conversation
+                setLatestVideoContext(videoContext);
+              }
             }
           } catch (error) {
             console.error('Error processing frame:', error);
-            addMessage({
-              text: 'Error processing video frame',
-              sender: 'ai',
-              error: true
-            });
-            setError('Error processing video frame');
+            setError('Error processing video frame. Continuing with audio only.');
+            // Don't add error message to conversation, just log it
           }
-        }, 2000);
+        }, 5000);
       }
     } catch (error) {
       console.error('Error accessing camera:', error);
@@ -274,18 +297,35 @@ function App() {
       <div className="w-full max-w-2xl bg-white rounded-lg shadow-lg p-6">
         <h1 className="text-2xl font-bold text-center mb-6">AI Video Chat</h1>
         
-        {error && (
-          <div className={`border px-4 py-3 rounded mb-4 flex items-center justify-between ${
-            error.includes('Retrying') || error.includes('Waiting for connection')
-              ? 'bg-yellow-100 border-yellow-400 text-yellow-700'
-              : 'bg-red-100 border-red-400 text-red-700'
-          }`}>
-            <span>{error}</span>
-            {(error.includes('Retrying') || error.includes('Waiting for connection')) && (
-              <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-yellow-600"></div>
-            )}
-          </div>
-        )}
+        <div className="space-y-2 mb-4">
+          {/* Network Status Indicators */}
+          {networkStatus.isRetrying && (
+            <div className="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded flex items-center justify-between">
+              <div>
+                <p className="font-semibold">Reconnecting to voice chat...</p>
+                <p className="text-sm">Attempt {networkStatus.retryCount}/3</p>
+                {networkStatus.lastError && (
+                  <p className="text-sm mt-1">{networkStatus.lastError}</p>
+                )}
+              </div>
+              <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-blue-600"></div>
+            </div>
+          )}
+          
+          {isOffline && (
+            <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded flex items-center justify-between">
+              <span>Network connection lost. Voice chat paused.</span>
+              <div className="animate-pulse rounded-full h-3 w-3 bg-yellow-600"></div>
+            </div>
+          )}
+
+          {/* General Error Messages */}
+          {error && !error.includes('Retrying') && !error.includes('Waiting for connection') && (
+            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+              <span>{error}</span>
+            </div>
+          )}
+        </div>
         
         <div className="relative aspect-video bg-zinc-900 rounded-lg overflow-hidden mb-4">
           <div className="relative">

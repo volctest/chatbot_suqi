@@ -10,6 +10,8 @@ export class NetworkStatus {
   private isOnline: boolean = navigator.onLine;
   private speechRecognizer: SpeechRecognizer | null = null;
   private wasRecognitionRunning: boolean = false;
+  private isRestartingRecognition: boolean = false;
+  private restartAttemptTimeout: number | null = null;
 
   private constructor() {
     this.setupEventListeners();
@@ -32,17 +34,32 @@ export class NetworkStatus {
     this.isOnline = true;
     this.notifyListeners();
 
-    // Attempt to restart speech recognition if it was running
-    if (this.wasRecognitionRunning && this.speechRecognizer) {
-      console.log('Attempting to restart speech recognition');
-      this.speechRecognizer.start(
-        (result) => {
-          console.log('Speech recognition restarted successfully:', result);
-        },
-        (error) => {
-          console.error('Failed to restart speech recognition:', error);
-        }
-      );
+    // Attempt to restart speech recognition if it was running and not already restarting
+    if (this.wasRecognitionRunning && this.speechRecognizer && !this.isRestartingRecognition) {
+      console.log('Network restored, preparing to restart speech recognition');
+      this.isRestartingRecognition = true;
+
+      // Clear any existing restart attempt
+      if (this.restartAttemptTimeout !== null) {
+        window.clearTimeout(this.restartAttemptTimeout);
+      }
+
+      // Add a small delay before attempting restart to ensure network is stable
+      this.restartAttemptTimeout = window.setTimeout(() => {
+        console.log('Attempting to restart speech recognition');
+        this.speechRecognizer?.start(
+          (result) => {
+            console.log('Speech recognition restarted successfully:', result);
+            this.isRestartingRecognition = false;
+            this.restartAttemptTimeout = null;
+          },
+          (error) => {
+            console.error('Failed to restart speech recognition:', error);
+            this.isRestartingRecognition = false;
+            this.restartAttemptTimeout = null;
+          }
+        );
+      }, 1000); // Wait 1 second for network to stabilize
     }
   }
 
@@ -77,7 +94,15 @@ export class NetworkStatus {
 
   public setSpeechRecognizer(recognizer: SpeechRecognizer | null) {
     this.speechRecognizer = recognizer;
-    this.wasRecognitionRunning = false;
+    // Only reset flags if we're removing the recognizer
+    if (!recognizer) {
+      this.wasRecognitionRunning = false;
+      this.isRestartingRecognition = false;
+      if (this.restartAttemptTimeout !== null) {
+        window.clearTimeout(this.restartAttemptTimeout);
+        this.restartAttemptTimeout = null;
+      }
+    }
   }
 
   public getIsOnline(): boolean {
@@ -87,7 +112,17 @@ export class NetworkStatus {
   public cleanup() {
     window.removeEventListener('online', () => this.handleOnline());
     window.removeEventListener('offline', () => this.handleOffline());
+    
+    // Clear any pending restart attempts
+    if (this.restartAttemptTimeout !== null) {
+      window.clearTimeout(this.restartAttemptTimeout);
+      this.restartAttemptTimeout = null;
+    }
+    
+    // Reset all state
     this.listeners = [];
     this.speechRecognizer = null;
+    this.wasRecognitionRunning = false;
+    this.isRestartingRecognition = false;
   }
 }

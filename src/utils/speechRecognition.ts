@@ -11,6 +11,8 @@ export class SpeechRecognizer {
   private retryCount: number = 0;
   private readonly maxRetries: number = 3;
   private readonly baseRetryDelay: number = 1000; // Base delay of 1 second
+  private isNetworkError: boolean = false;
+  private networkStatusListener: (() => void) | null = null;
 
   constructor() {
     // Check for browser support
@@ -49,25 +51,57 @@ export class SpeechRecognizer {
     };
 
     this.recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-      if (event.error === 'network' && this.retryCount < this.maxRetries) {
-        this.retryCount++;
-        const retryDelay = this.baseRetryDelay * Math.pow(2, this.retryCount - 1); // Exponential backoff
-        console.log(`Network error in speech recognition. Retry ${this.retryCount}/${this.maxRetries} in ${retryDelay}ms`);
-        onError(`Network error in speech recognition. Retrying... (Attempt ${this.retryCount}/${this.maxRetries})`);
+      if (event.error === 'network') {
+        this.isNetworkError = true;
+        console.error(`Speech recognition network error occurred at ${new Date().toISOString()}`);
         
-        setTimeout(() => {
-          if (this.recognition) {
-            console.log('Attempting to restart speech recognition...');
-            this.start(onResult, onError);
+        // Only retry if we're online and haven't exceeded retry count
+        if (navigator.onLine && this.retryCount < this.maxRetries) {
+          this.retryCount++;
+          const retryDelay = this.baseRetryDelay * Math.pow(2, this.retryCount - 1); // Exponential backoff
+          
+          console.log(`Network error details:
+            - Retry attempt: ${this.retryCount}/${this.maxRetries}
+            - Delay: ${retryDelay}ms
+            - Network status: ${navigator.onLine ? 'online' : 'offline'}
+            - Timestamp: ${new Date().toISOString()}`
+          );
+          
+          onError(`Network error in speech recognition. Retrying... (Attempt ${this.retryCount}/${this.maxRetries})`);
+          
+          // Set up network status listener if not already set
+          if (!this.networkStatusListener) {
+            this.networkStatusListener = () => {
+              if (navigator.onLine && this.isNetworkError) {
+                console.log('Network is back online. Attempting to restart speech recognition...');
+                this.isNetworkError = false;
+                this.start(onResult, onError);
+              }
+            };
+            window.addEventListener('online', this.networkStatusListener);
           }
-        }, retryDelay);
-      } else {
-        if (event.error === 'network') {
-          onError(`Speech recognition failed after ${this.maxRetries} retry attempts. Please check your connection.`);
+          
+          setTimeout(() => {
+            if (this.recognition && navigator.onLine) {
+              console.log('Attempting to restart speech recognition...');
+              this.start(onResult, onError);
+            } else if (!navigator.onLine) {
+              console.log('Network still offline. Waiting for connection...');
+              onError('Waiting for network connection to resume...');
+            }
+          }, retryDelay);
         } else {
-          onError(`Speech recognition error: ${event.error}`);
+          const reason = this.retryCount >= this.maxRetries
+            ? `Maximum retry attempts (${this.maxRetries}) reached`
+            : 'Network is offline';
+          
+          console.error(`Speech recognition failed: ${reason}`);
+          onError(`Speech recognition failed: ${reason}. Please check your connection and try again.`);
+          this.retryCount = 0; // Reset retry count for future attempts
         }
-        this.retryCount = 0; // Reset retry count for future attempts
+      } else {
+        console.error(`Non-network speech recognition error: ${event.error}`);
+        onError(`Speech recognition error: ${event.error}`);
       }
     };
 
@@ -82,9 +116,20 @@ export class SpeechRecognizer {
   stop() {
     if (!this.isListening || !this.recognition) return;
     
+    
     try {
       this.recognition.stop();
       this.isListening = false;
+      
+      // Clean up network status listener
+      if (this.networkStatusListener) {
+        window.removeEventListener('online', this.networkStatusListener);
+        this.networkStatusListener = null;
+      }
+      
+      // Reset error states
+      this.isNetworkError = false;
+      this.retryCount = 0;
     } catch (error) {
       console.error('Error stopping speech recognition:', error);
     }
