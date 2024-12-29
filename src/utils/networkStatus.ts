@@ -59,7 +59,7 @@ export class NetworkStatus {
             this.restartAttemptTimeout = null;
           }
         );
-      }, 1000); // Wait 1 second for network to stabilize
+      }, 2000); // Wait 2 seconds for network to stabilize for better reliability
     }
   }
 
