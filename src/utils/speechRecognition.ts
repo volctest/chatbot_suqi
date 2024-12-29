@@ -4,13 +4,14 @@ interface RecognitionResult {
 }
 
 /// <reference path="../types/speech.d.ts" />
+/// <reference path="../types/network.d.ts" />
 
 export class SpeechRecognizer {
   private recognition: SpeechRecognition | null = null;
   private isListening: boolean = false;
   private retryCount: number = 0;
   private readonly maxRetries: number = 3;
-  private readonly baseRetryDelay: number = 1000; // Base delay of 1 second
+  private readonly baseRetryDelay: number = 2000; // Base delay of 2 seconds for better stability
   private isNetworkError: boolean = false;
   private networkStatusListener: (() => void) | null = null;
 
@@ -64,8 +65,16 @@ export class SpeechRecognizer {
             - Retry attempt: ${this.retryCount}/${this.maxRetries}
             - Delay: ${retryDelay}ms
             - Network status: ${navigator.onLine ? 'online' : 'offline'}
-            - Timestamp: ${new Date().toISOString()}`
+            - Timestamp: ${new Date().toISOString()}
+            - Browser: ${navigator.userAgent}`
           );
+          
+          // Additional logging for debugging
+          console.log('Connection info:', {
+            downlink: navigator.connection?.downlink,
+            effectiveType: navigator.connection?.effectiveType,
+            rtt: navigator.connection?.rtt
+          });
           
           onError(`Network error in speech recognition. Retrying... (Attempt ${this.retryCount}/${this.maxRetries})`);
           
