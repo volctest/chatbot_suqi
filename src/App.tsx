@@ -293,12 +293,10 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-zinc-100 p-4">
-      <div className="w-full max-w-2xl bg-white rounded-lg shadow-lg p-6">
-        <h1 className="text-2xl font-bold text-center mb-6">AI Video Chat</h1>
-        
-        <div className="space-y-2 mb-4">
-          {/* Network Status Indicators */}
+    <div className="min-h-screen bg-zinc-100 p-4 relative">
+      {/* Network Status Indicators - Fixed at top */}
+      <div className="absolute top-4 left-1/2 transform -translate-x-1/2 w-full max-w-4xl z-10">
+        <div className="space-y-2">
           {networkStatus.isRetrying && (
             <div className="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded flex items-center justify-between">
               <div>
@@ -326,55 +324,67 @@ function App() {
             </div>
           )}
         </div>
-        
-        <div className="relative aspect-video bg-zinc-900 rounded-lg overflow-hidden mb-4">
-          <div className="relative">
-            <video
-              ref={videoRef}
-              autoPlay
-              playsInline
-              className={`w-full h-full ${isVideoOn ? 'block' : 'hidden'}`}
-            />
-            {isSilent && (
-              <div className="absolute top-4 right-4 bg-blue-500 text-white px-3 py-1 rounded-full text-sm animate-pulse">
-                Silence Detected
-              </div>
-            )}
-          </div>
-          {!isVideoOn && !isLoading && (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <Camera className="w-16 h-16 text-zinc-600" />
-            </div>
-          )}
-          {isLoading && (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500"></div>
-            </div>
-          )}
-        </div>
-        
-        <div className="bg-zinc-50 rounded-lg p-4 mb-4 max-h-96 overflow-y-auto">
-          <MessageList />
-        </div>
+      </div>
 
-        <div className="flex justify-center gap-4">
-          {!isVideoOn ? (
-            <Button onClick={startVideo} className="gap-2">
-              <Video />
-              Start Video
-            </Button>
-          ) : (
-            <>
-              <Button variant="outline" onClick={toggleMute}>
-                {isMuted ? <MicOff /> : <Mic />}
-                {isMuted ? 'Unmute' : 'Mute'}
-              </Button>
-              <Button variant="destructive" onClick={stopVideo}>
-                <VideoOff className="mr-2" />
-                End Call
-              </Button>
-            </>
-          )}
+      {/* Main Content - Side by Side Layout */}
+      <div className="flex justify-center items-start mt-24">
+        <div className="w-full max-w-6xl flex gap-6">
+          {/* Left Side - Video */}
+          <div className="flex-1 bg-white rounded-lg shadow-lg p-6">
+            <h1 className="text-2xl font-bold text-center mb-6">AI Video Chat</h1>
+            
+            <div className="relative bg-zinc-900 rounded-lg overflow-hidden mb-6">
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                className={`w-full aspect-video object-cover ${isVideoOn ? 'block' : 'hidden'}`}
+              />
+              {isSilent && (
+                <div className="absolute top-4 right-4 bg-blue-500 text-white px-3 py-1 rounded-full text-sm animate-pulse">
+                  Silence Detected
+                </div>
+              )}
+              {!isVideoOn && !isLoading && (
+                <div className="absolute inset-0 flex items-center justify-center aspect-video">
+                  <Camera className="w-16 h-16 text-zinc-600" />
+                </div>
+              )}
+              {isLoading && (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500"></div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-center gap-4">
+              {!isVideoOn ? (
+                <Button onClick={startVideo} className="gap-2">
+                  <Video />
+                  Start Video
+                </Button>
+              ) : (
+                <>
+                  <Button variant="outline" onClick={toggleMute}>
+                    {isMuted ? <MicOff /> : <Mic />}
+                    {isMuted ? 'Unmute' : 'Mute'}
+                  </Button>
+                  <Button variant="destructive" onClick={stopVideo}>
+                    <VideoOff className="mr-2" />
+                    End Call
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Right Side - Video Analysis */}
+          <div className="flex-1 bg-white rounded-lg shadow-lg p-6">
+            <h2 className="text-xl font-semibold mb-6">Video Analysis</h2>
+            <div className="bg-zinc-50 rounded-lg p-4 min-h-[calc(100vh-12rem)] overflow-y-auto">
+              <MessageList />
+            </div>
+          </div>
         </div>
       </div>
     </div>
