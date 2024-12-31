@@ -99,6 +99,11 @@ function App() {
       wsRef.current.onerror = (error) => {
         console.error('WebSocket error:', error)
         setError('连接错误 - 正在尝试重新连接...')
+        // Stop frame transmission
+        if (frameIntervalRef.current) {
+          clearInterval(frameIntervalRef.current)
+          frameIntervalRef.current = null
+        }
         // Close the connection to trigger reconnect
         wsRef.current?.close()
       }
@@ -107,6 +112,7 @@ function App() {
         console.log('WebSocket closed')
         clearInterval(frameIntervalRef.current!)
         frameIntervalRef.current = null
+        cleanupStream()  // Ensure camera is stopped when connection is lost
         setError('连接已断开 - 正在尝试重新连接...')
         
         // Attempt to reconnect after 2 seconds
@@ -132,23 +138,27 @@ function App() {
 
   }
 
-  const stopVideo = () => {
-    if (videoRef.current && videoRef.current.srcObject) {
+  const cleanupStream = () => {
+    if (videoRef.current?.srcObject) {
       const stream = videoRef.current.srcObject as MediaStream
       stream.getTracks().forEach(track => track.stop())
       videoRef.current.srcObject = null
-      setIsVideoStarted(false)
-      setIsMuted(false)  // Reset mute state when stopping video
-      
-      // Clean up WebSocket and interval
-      if (wsRef.current) {
-        wsRef.current.close()
-        wsRef.current = null
-      }
-      if (frameIntervalRef.current) {
-        clearInterval(frameIntervalRef.current)
-        frameIntervalRef.current = null
-      }
+    }
+  }
+
+  const stopVideo = () => {
+    cleanupStream()
+    setIsVideoStarted(false)
+    setIsMuted(false)  // Reset mute state when stopping video
+    
+    // Clean up WebSocket and interval
+    if (wsRef.current) {
+      wsRef.current.close()
+      wsRef.current = null
+    }
+    if (frameIntervalRef.current) {
+      clearInterval(frameIntervalRef.current)
+      frameIntervalRef.current = null
     }
   }
 
