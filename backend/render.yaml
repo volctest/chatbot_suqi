@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: gemini-video-chat
+    env: python
+    buildCommand: pip install poetry && poetry install
+    startCommand: poetry run uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.0
+      - key: GOOGLE_AI_STUDIO_API_KEY
+        sync: false
+      - key: PORT
+        value: 10000
+    healthCheckPath: /healthz
+    autoDeploy: false
+    websocket:
+      maxConnectionsPerInstance: 100
+      idleTimeout: 300s

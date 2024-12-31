@@ -1,0 +1,82 @@
+app = "app-xaafadcu"
+primary_region = "sin"
+
+[build]
+  builder = "paketobuildpacks/builder:base"
+
+[env]
+  PORT = "8000"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+  
+  [http_service.process_group]
+    min_machines = 1
+    max_machines = 1
+    restart_policy = "never"
+    suspend_policy = "never"
+  
+  [http_service.concurrency]
+    type = "connections"
+    hard_limit = 1000
+    soft_limit = 500
+
+  [[http_service.checks]]
+    grace_period = "5s"
+    interval = "5s"
+    method = "GET"
+    path = "/healthz"
+    protocol = "http"
+    restart_limit = 0
+    timeout = "2s"
+    tls_skip_verify = true
+
+  [http_service.tls]
+    alpn = ["h2", "http/1.1"]
+
+[deploy]
+  strategy = "immediate"
+  
+[experimental]
+  auto_rollback = true
+  
+[metrics]
+  port = 9091
+  path = "/metrics"
+
+[[services]]
+  protocol = "tcp"
+  internal_port = 8000
+  processes = ["app"]
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+    force_https = true
+
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
+
+  [services.concurrency]
+    type = "connections"
+    hard_limit = 1000
+    soft_limit = 500
+
+  [[services.tcp_checks]]
+    interval = "5s"
+    timeout = "2s"
+    grace_period = "10s"
+    restart_limit = 0
+
+[[vm]]
+  memory = "256mb"
+  cpu_kind = "shared"
+  cpus = 1
+  min_machines_running = 1
+  auto_stop_machines = false
